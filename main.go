@@ -1,123 +1,167 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
+type Account struct {
+	Name  string `json:"name"`
+	Email string `json:"email"`
+	Alias string `json:"alias"`
+}
+
 type model struct {
-	currentName    string
-	currentEmail   string
-	workName       string
-	workEmail      string
-	personalName   string
-	personalEmail  string
+	accounts       []Account
+	currentAccount Account
 	step           int
-	input          string
-	accountType    string // "work" or "personal"
+	textInput      textinput.Model
+	inputField     string
+	accountList    list.Model
 	displayMessage string
 }
 
+const configFile = "gitswitch_config.json"
+
+func (a Account) Title() string       { return a.Alias }
+func (a Account) Description() string { return fmt.Sprintf("%s (%s)", a.Name, a.Email) }
+func (a Account) FilterValue() string { return a.Alias }
+
 func initialModel() model {
+	ti := textinput.New()
+	ti.Focus()
+
+	m := model{
+		step:      1,
+		textInput: ti,
+	}
+
+	// Load existing configuration
+	if err := m.loadConfig(); err != nil {
+		// If config doesn't exist, set up initial configuration
+		currentName, _ := getGitConfig("user.name")
+		currentEmail, _ := getGitConfig("user.email")
+		m.accounts = append(m.accounts, Account{
+			Name:  strings.TrimSpace(currentName),
+			Email: strings.TrimSpace(currentEmail),
+			Alias: "Default",
+		})
+		m.saveConfig()
+	}
+
+	// Detect current account
 	currentName, _ := getGitConfig("user.name")
 	currentEmail, _ := getGitConfig("user.email")
-	return model{
-		currentName:  strings.TrimSpace(currentName),
-		currentEmail: strings.TrimSpace(currentEmail),
-		step:         1,
+	currentName = strings.TrimSpace(currentName)
+	currentEmail = strings.TrimSpace(currentEmail)
+
+	for _, account := range m.accounts {
+		if account.Name == currentName && account.Email == currentEmail {
+			m.currentAccount = account
+			break
+		}
 	}
+
+	if m.currentAccount.Name == "" {
+		m.currentAccount = Account{Name: currentName, Email: currentEmail, Alias: "Unknown"}
+	}
+
+	m.accountList = list.New(m.getAccountItems(), list.NewDefaultDelegate(), 0, 0)
+	m.accountList.Title = "Select an account to switch to"
+
+	return m
 }
 
 func main() {
 	p := tea.NewProgram(initialModel())
-	if err := p.Start(); err != nil {
-		fmt.Fprintf(os.Stderr, "Alas, there's been an error: %v", err)
+	if _, err := p.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v", err)
 		os.Exit(1)
 	}
 }
 
 func (m model) Init() tea.Cmd {
-	return nil
+	return textinput.Blink
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch msg.Type {
-		case tea.KeyEnter:
-			m.handleInput()
-		case tea.KeyBackspace:
-			if len(m.input) > 0 {
-				m.input = m.input[:len(m.input)-1]
-			}
-		case tea.KeyRunes:
-			m.input += msg.String()
+		switch msg.String() {
+		case "ctrl+c", "q":
+			return m, tea.Quit
+		case "enter":
+			m.handleEnter()
 		}
 	}
-	return m, nil
+
+	if m.step == 4 {
+		m.accountList, cmd = m.accountList.Update(msg)
+	} else {
+		m.textInput, cmd = m.textInput.Update(msg)
+	}
+	return m, cmd
 }
 
-func (m *model) handleInput() {
+func (m *model) handleEnter() {
 	switch m.step {
 	case 1:
-		m.accountType = strings.ToLower(strings.TrimSpace(m.input))
-		if m.accountType == "work" || m.accountType == "personal" {
-			if m.accountType == "personal" {
-				m.personalName = m.currentName
-				m.personalEmail = m.currentEmail
-			} else {
-				m.workName = m.currentName
-				m.workEmail = m.currentEmail
-			}
-			m.input = ""
-			m.step = 2
-		} else {
-			m.displayMessage = "Invalid input. Please type 'work' or 'personal'."
-			m.input = ""
-		}
+		m.step = 2
+		m.inputField = "action"
+		m.textInput.Placeholder = "Enter 'list' to see accounts, 'add' to add a new account, or 'switch' to switch accounts"
+		m.textInput.SetValue("")
 	case 2:
-		if m.accountType == "personal" {
-			m.workName = strings.TrimSpace(m.input)
-		} else {
-			m.personalName = strings.TrimSpace(m.input)
+		action := strings.ToLower(m.textInput.Value())
+		switch action {
+		case "list":
+			m.displayAccounts()
+			m.step = 1
+		case "add":
+			m.step = 3
+			m.inputField = "name"
+			m.textInput.Placeholder = "Enter account name"
+			m.textInput.SetValue("")
+		case "switch":
+			m.step = 4
+		default:
+			m.displayMessage = "Invalid action. Please enter 'list', 'add', or 'switch'."
+			m.step = 1
 		}
-		m.input = ""
-		m.step = 3
 	case 3:
-		if m.accountType == "personal" {
-			m.workEmail = strings.TrimSpace(m.input)
+		if m.inputField == "name" {
+			m.currentAccount.Name = m.textInput.Value()
+			m.inputField = "email"
+			m.textInput.Placeholder = "Enter account email"
+			m.textInput.SetValue("")
+		} else if m.inputField == "email" {
+			m.currentAccount.Email = m.textInput.Value()
+			m.inputField = "alias"
+			m.textInput.Placeholder = "Enter account alias"
+			m.textInput.SetValue("")
 		} else {
-			m.personalEmail = strings.TrimSpace(m.input)
+			m.currentAccount.Alias = m.textInput.Value()
+			m.accounts = append(m.accounts, m.currentAccount)
+			m.saveConfig()
+			m.displayMessage = fmt.Sprintf("Added new account: %s (%s)", m.currentAccount.Name, m.currentAccount.Email)
+			m.step = 1
 		}
-		m.input = ""
-		m.step = 4
 	case 4:
-		switch m.input {
-		case "1":
-			if m.accountType == "personal" {
-				m.displayMessage = "Already on personal account."
-			} else {
-				switchAccount(m.personalName, m.personalEmail)
-				m.displayMessage = fmt.Sprintf("Switched to personal account: %s (%s)", m.personalName, m.personalEmail)
-				m.accountType = "personal"
-			}
-		case "2":
-			if m.accountType == "work" {
-				m.displayMessage = "Already on work account."
-			} else {
-				switchAccount(m.workName, m.workEmail)
-				m.displayMessage = fmt.Sprintf("Switched to work account: %s (%s)", m.workName, m.workEmail)
-				m.accountType = "work"
-			}
-		case "q":
-			os.Exit(0)
-		}
-		m.input = ""
+		selectedAccount := m.accountList.SelectedItem().(Account)
+		switchAccount(selectedAccount.Name, selectedAccount.Email)
+		m.currentAccount = selectedAccount
+		m.displayMessage = fmt.Sprintf("Switched to account: %s (%s)", selectedAccount.Name, selectedAccount.Email)
+		m.step = 1
 	}
 }
 
@@ -130,30 +174,51 @@ func (m model) View() string {
 
 	switch m.step {
 	case 1:
-		body = fmt.Sprintf("Detected current GitHub account:\n\nUsername: %s\nEmail: %s\n\nWould you like to categorize this account as work or personal? (Type 'work' or 'personal')", accountStyle.Render(m.currentName), accountStyle.Render(m.currentEmail))
-	case 2:
-		body = "Enter username for the second account: " + m.input
-	case 3:
-		body = "Enter email for the second account: " + m.input
+		body = fmt.Sprintf("Current GitHub account: %s\n\nUsername: %s\nEmail: %s\n\nPress Enter to continue.",
+			accountStyle.Render(m.currentAccount.Alias),
+			accountStyle.Render(m.currentAccount.Name),
+			accountStyle.Render(m.currentAccount.Email))
+		if m.displayMessage != "" {
+			body += "\n\n" + m.displayMessage
+		}
+	case 2, 3:
+		body = fmt.Sprintf("%s\n%s", m.textInput.Placeholder, m.textInput.View())
 	case 4:
-		currentAccount := fmt.Sprintf("Current GitHub account: %s (%s)", accountStyle.Render(m.accountType), m.getEmail())
-		options := "Press 1 to switch to personal account\nPress 2 to switch to work account\nPress q to quit"
-		body = fmt.Sprintf("%s\n\n%s\n\n%s", header, currentAccount, options)
-	}
-
-	if m.displayMessage != "" {
-		body += "\n\n" + m.displayMessage
-		m.displayMessage = ""
+		body = m.accountList.View()
 	}
 
 	return lipgloss.NewStyle().Padding(1, 2).Render(fmt.Sprintf("%s\n\n%s", header, body))
 }
 
-func (m model) getEmail() string {
-	if m.accountType == "personal" {
-		return m.personalEmail
+func (m *model) loadConfig() error {
+	data, err := ioutil.ReadFile(configFile)
+	if err != nil {
+		return err
 	}
-	return m.workEmail
+	return json.Unmarshal(data, &m.accounts)
+}
+
+func (m *model) saveConfig() error {
+	data, err := json.MarshalIndent(m.accounts, "", "  ")
+	if err != nil {
+		return err
+	}
+	return ioutil.WriteFile(configFile, data, 0644)
+}
+
+func (m *model) displayAccounts() {
+	m.displayMessage = "Saved accounts:\n"
+	for _, account := range m.accounts {
+		m.displayMessage += fmt.Sprintf("- %s: %s (%s)\n", account.Alias, account.Name, account.Email)
+	}
+}
+
+func (m *model) getAccountItems() []list.Item {
+	items := make([]list.Item, len(m.accounts))
+	for i, account := range m.accounts {
+		items[i] = account
+	}
+	return items
 }
 
 func switchAccount(username, email string) {
