@@ -27,6 +27,7 @@ type model struct {
 	textInput      textinput.Model
 	inputField     string
 	accountList    list.Model
+	actionList     list.Model
 	displayMessage string
 }
 
@@ -42,6 +43,15 @@ var (
 func (a Account) Title() string       { return a.Alias }
 func (a Account) Description() string { return fmt.Sprintf("%s (%s)", a.Name, a.Email) }
 func (a Account) FilterValue() string { return a.Alias }
+
+type Action struct {
+	name        string
+	description string
+}
+
+func (a Action) Title() string       { return a.name }
+func (a Action) Description() string { return a.description }
+func (a Action) FilterValue() string { return a.name }
 
 func initialModel() model {
 	ti := textinput.New()
@@ -82,12 +92,25 @@ func initialModel() model {
 		m.currentAccount = Account{Name: currentName, Email: currentEmail, Alias: "Unknown"}
 	}
 
-	// Set up the list with account names directly, no pagination
-	m.accountList = list.New(m.getAccountItems(), list.NewDefaultDelegate(), 20, 10) // Set list width and height
+	// Set up the account list
+	m.accountList = list.New(m.getAccountItems(), list.NewDefaultDelegate(), 20, 10)
 	m.accountList.Title = "Select an account to switch to"
-	m.accountList.SetShowPagination(false) // Disable showing pagination numbers
-	m.accountList.SetShowHelp(false)       // Disable showing help text
-	m.accountList.SetShowStatusBar(false)  // Disable showing the status bar
+	m.accountList.SetShowPagination(false)
+	m.accountList.SetShowHelp(false)
+	m.accountList.SetShowStatusBar(false)
+
+	// Set up the action list
+	actions := []list.Item{
+		Action{name: "List", description: "List all accounts"},
+		Action{name: "Add", description: "Add a new account"},
+		Action{name: "Switch", description: "Switch to another account"},
+		Action{name: "Delete", description: "Delete an account"}, // New delete option
+	}
+	m.actionList = list.New(actions, list.NewDefaultDelegate(), 20, 10)
+	m.actionList.Title = "Select an action"
+	m.actionList.SetShowPagination(false)
+	m.actionList.SetShowHelp(false)
+	m.actionList.SetShowStatusBar(false)
 
 	return m
 }
@@ -113,43 +136,43 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "q":
 			return m, tea.Quit
 		case "enter":
-			m.handleEnter()
+			return m.handleEnter()
 		}
 	}
 
-	if m.step == 4 {
+	switch m.step {
+	case 2:
+		m.actionList, cmd = m.actionList.Update(msg)
+	case 4:
 		m.accountList, cmd = m.accountList.Update(msg)
-	} else {
+	default:
 		m.textInput, cmd = m.textInput.Update(msg)
 	}
 	return m, cmd
 }
 
-func (m *model) handleEnter() {
+func (m model) handleEnter() (tea.Model, tea.Cmd) {
 	switch m.step {
 	case 1:
 		m.step = 2
-		m.inputField = "action"
-		m.textInput.Placeholder = placeholderStyle("Enter 'list' to see accounts, 'add' to add a new account, or 'switch' to switch accounts")
-		m.textInput.SetValue("")
 	case 2:
-		action := strings.ToLower(m.textInput.Value())
-		switch action {
-		case "list":
+		selectedAction := m.actionList.SelectedItem().(Action)
+		switch selectedAction.name {
+		case "List":
 			m.displayAccounts()
 			m.step = 1
-		case "add":
+		case "Add":
 			m.step = 3
 			m.inputField = "name"
 			m.textInput.Placeholder = placeholderStyle("Enter account name")
 			m.textInput.SetValue("")
-		case "switch":
+		case "Switch":
 			m.step = 4
-		default:
-			m.displayMessage = "Invalid action. Please enter 'list', 'add', or 'switch'."
-			m.step = 1
+		case "Delete":
+			m.step = 5
 		}
 	case 3:
+		// Adding an account
 		if m.inputField == "name" {
 			m.currentAccount.Name = m.textInput.Value()
 			m.inputField = "email"
@@ -168,16 +191,29 @@ func (m *model) handleEnter() {
 			m.step = 1
 		}
 	case 4:
+		// Switching account
 		selectedAccount := m.accountList.SelectedItem().(Account)
 		switchAccount(selectedAccount.Name, selectedAccount.Email)
 		m.currentAccount = selectedAccount
 		m.displayMessage = fmt.Sprintf("Switched to account: %s (%s)", accountStyle(selectedAccount.Name), accountStyle(selectedAccount.Email))
-		m.step = 1
+		return m, tea.Quit
+	case 5:
+		// Deleting an account
+		selectedAccount := m.accountList.SelectedItem().(Account)
+		if selectedAccount.Alias == "Default" {
+			m.displayMessage = "You cannot delete the Default account."
+			m.step = 1
+		} else {
+			m.deleteAccount(selectedAccount)
+			m.displayMessage = fmt.Sprintf("Deleted account: %s (%s)", accountStyle(selectedAccount.Name), accountStyle(selectedAccount.Email))
+			m.step = 1
+		}
 	}
+	return m, nil
 }
 
 func (m model) View() string {
-	header := titleStyle("GitSwitch CLI")
+	header := titleStyle("GitSwitch")
 	var body string
 
 	switch m.step {
@@ -189,10 +225,18 @@ func (m model) View() string {
 		if m.displayMessage != "" {
 			body += "\n\n" + m.displayMessage
 		}
-	case 2, 3:
+	case 2:
+		body = m.actionList.View()
+	case 3:
 		body = fmt.Sprintf("%s\n%s", placeholderStyle(m.textInput.Placeholder), m.textInput.View())
 	case 4:
 		body = m.accountList.View()
+	case 5:
+		// Display account details after switching and before closing
+		body = fmt.Sprintf("Switched to account: %s\n\nUsername: %s\nEmail: %s\n\nPress Enter to exit.",
+			accountStyle(m.currentAccount.Alias),
+			accountStyle(m.currentAccount.Name),
+			accountStyle(m.currentAccount.Email))
 	}
 
 	return lipgloss.NewStyle().Padding(1, 2).Render(fmt.Sprintf("%s\n\n%s", header, body))
@@ -241,4 +285,13 @@ func getGitConfig(key string) (string, error) {
 		return "", err
 	}
 	return string(output), nil
+}
+func (m *model) deleteAccount(account Account) {
+	for i, acc := range m.accounts {
+		if acc == account {
+			m.accounts = append(m.accounts[:i], m.accounts[i+1:]...)
+			break
+		}
+	}
+	m.saveConfig()
 }
