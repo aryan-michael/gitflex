@@ -32,6 +32,13 @@ type model struct {
 
 const configFile = "gitswitch_config.json"
 
+var (
+	titleStyle       = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF5F87")).Background(lipgloss.Color("#282A36")).Padding(1, 4).MarginBottom(1).Align(lipgloss.Center).Render
+	headerStyle      = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#50FA7B")).Render
+	accountStyle     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#BD93F9")).Render
+	placeholderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#8BE9FD")).Render
+)
+
 func (a Account) Title() string       { return a.Alias }
 func (a Account) Description() string { return fmt.Sprintf("%s (%s)", a.Name, a.Email) }
 func (a Account) FilterValue() string { return a.Alias }
@@ -75,8 +82,12 @@ func initialModel() model {
 		m.currentAccount = Account{Name: currentName, Email: currentEmail, Alias: "Unknown"}
 	}
 
-	m.accountList = list.New(m.getAccountItems(), list.NewDefaultDelegate(), 0, 0)
+	// Set up the list with account names directly, no pagination
+	m.accountList = list.New(m.getAccountItems(), list.NewDefaultDelegate(), 20, 10) // Set list width and height
 	m.accountList.Title = "Select an account to switch to"
+	m.accountList.SetShowPagination(false) // Disable showing pagination numbers
+	m.accountList.SetShowHelp(false)       // Disable showing help text
+	m.accountList.SetShowStatusBar(false)  // Disable showing the status bar
 
 	return m
 }
@@ -119,7 +130,7 @@ func (m *model) handleEnter() {
 	case 1:
 		m.step = 2
 		m.inputField = "action"
-		m.textInput.Placeholder = "Enter 'list' to see accounts, 'add' to add a new account, or 'switch' to switch accounts"
+		m.textInput.Placeholder = placeholderStyle("Enter 'list' to see accounts, 'add' to add a new account, or 'switch' to switch accounts")
 		m.textInput.SetValue("")
 	case 2:
 		action := strings.ToLower(m.textInput.Value())
@@ -130,7 +141,7 @@ func (m *model) handleEnter() {
 		case "add":
 			m.step = 3
 			m.inputField = "name"
-			m.textInput.Placeholder = "Enter account name"
+			m.textInput.Placeholder = placeholderStyle("Enter account name")
 			m.textInput.SetValue("")
 		case "switch":
 			m.step = 4
@@ -142,47 +153,44 @@ func (m *model) handleEnter() {
 		if m.inputField == "name" {
 			m.currentAccount.Name = m.textInput.Value()
 			m.inputField = "email"
-			m.textInput.Placeholder = "Enter account email"
+			m.textInput.Placeholder = placeholderStyle("Enter account email")
 			m.textInput.SetValue("")
 		} else if m.inputField == "email" {
 			m.currentAccount.Email = m.textInput.Value()
 			m.inputField = "alias"
-			m.textInput.Placeholder = "Enter account alias"
+			m.textInput.Placeholder = placeholderStyle("Enter account alias")
 			m.textInput.SetValue("")
 		} else {
 			m.currentAccount.Alias = m.textInput.Value()
 			m.accounts = append(m.accounts, m.currentAccount)
 			m.saveConfig()
-			m.displayMessage = fmt.Sprintf("Added new account: %s (%s)", m.currentAccount.Name, m.currentAccount.Email)
+			m.displayMessage = fmt.Sprintf("Added new account: %s (%s)", accountStyle(m.currentAccount.Name), accountStyle(m.currentAccount.Email))
 			m.step = 1
 		}
 	case 4:
 		selectedAccount := m.accountList.SelectedItem().(Account)
 		switchAccount(selectedAccount.Name, selectedAccount.Email)
 		m.currentAccount = selectedAccount
-		m.displayMessage = fmt.Sprintf("Switched to account: %s (%s)", selectedAccount.Name, selectedAccount.Email)
+		m.displayMessage = fmt.Sprintf("Switched to account: %s (%s)", accountStyle(selectedAccount.Name), accountStyle(selectedAccount.Email))
 		m.step = 1
 	}
 }
 
 func (m model) View() string {
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6"))
-	accountStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("2"))
-
-	header := headerStyle.Render("GitSwitch CLI")
+	header := titleStyle("GitSwitch CLI")
 	var body string
 
 	switch m.step {
 	case 1:
 		body = fmt.Sprintf("Current GitHub account: %s\n\nUsername: %s\nEmail: %s\n\nPress Enter to continue.",
-			accountStyle.Render(m.currentAccount.Alias),
-			accountStyle.Render(m.currentAccount.Name),
-			accountStyle.Render(m.currentAccount.Email))
+			accountStyle(m.currentAccount.Alias),
+			accountStyle(m.currentAccount.Name),
+			accountStyle(m.currentAccount.Email))
 		if m.displayMessage != "" {
 			body += "\n\n" + m.displayMessage
 		}
 	case 2, 3:
-		body = fmt.Sprintf("%s\n%s", m.textInput.Placeholder, m.textInput.View())
+		body = fmt.Sprintf("%s\n%s", placeholderStyle(m.textInput.Placeholder), m.textInput.View())
 	case 4:
 		body = m.accountList.View()
 	}
@@ -209,7 +217,7 @@ func (m *model) saveConfig() error {
 func (m *model) displayAccounts() {
 	m.displayMessage = "Saved accounts:\n"
 	for _, account := range m.accounts {
-		m.displayMessage += fmt.Sprintf("- %s: %s (%s)\n", account.Alias, account.Name, account.Email)
+		m.displayMessage += fmt.Sprintf("- %s: %s (%s)\n", accountStyle(account.Alias), accountStyle(account.Name), accountStyle(account.Email))
 	}
 }
 
