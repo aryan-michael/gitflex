@@ -93,7 +93,7 @@ func initialModel() model {
 	}
 
 	// Set up the account list
-	m.accountList = list.New(m.getAccountItems(), list.NewDefaultDelegate(), 45, 15)
+	m.accountList = list.New(m.getAccountItems(), list.NewDefaultDelegate(), 50, 20)
 	m.accountList.Title = "Select an account to switch to"
 	m.accountList.SetShowPagination(false)
 	m.accountList.SetShowHelp(false)
@@ -106,7 +106,7 @@ func initialModel() model {
 		Action{name: "Switch", description: "Switch to another account"},
 		Action{name: "Delete", description: "Delete an account"}, // New delete option
 	}
-	m.actionList = list.New(actions, list.NewDefaultDelegate(), 45, 15)
+	m.actionList = list.New(actions, list.NewDefaultDelegate(), 50, 20)
 	m.actionList.Title = "Select an action"
 	m.actionList.SetShowPagination(false)
 	m.actionList.SetShowHelp(false)
