@@ -106,7 +106,7 @@ func initialModel() model {
 		Action{name: "Switch", description: "Switch to another account"},
 		Action{name: "Delete", description: "Delete an account"}, // New delete option
 	}
-	m.actionList = list.New(actions, list.NewDefaultDelegate(), 20, 10)
+	m.actionList = list.New(actions, list.NewDefaultDelegate(), 20, 20)
 	m.actionList.Title = "Select an action"
 	m.actionList.SetShowPagination(false)
 	m.actionList.SetShowHelp(false)
@@ -140,18 +140,24 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// Handle state-specific list updates
 	switch m.step {
 	case 2:
 		m.actionList, cmd = m.actionList.Update(msg)
 	case 4:
 		m.accountList, cmd = m.accountList.Update(msg)
+	case 5:
+		m.accountList, cmd = m.accountList.Update(msg) // Update the account list for deletion
 	default:
 		m.textInput, cmd = m.textInput.Update(msg)
 	}
+
 	return m, cmd
 }
 
 func (m model) handleEnter() (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
 	switch m.step {
 	case 1:
 		m.step = 2
@@ -169,6 +175,12 @@ func (m model) handleEnter() (tea.Model, tea.Cmd) {
 		case "Switch":
 			m.step = 4
 		case "Delete":
+			// Create a new account list specifically for deletion
+			m.accountList = list.New(m.getAccountItems(), list.NewDefaultDelegate(), 20, 10)
+			m.accountList.Title = "Select an account to delete"
+			m.accountList.SetShowPagination(false)
+			m.accountList.SetShowHelp(false)
+			m.accountList.SetShowStatusBar(false)
 			m.step = 5
 		}
 	case 3:
@@ -198,18 +210,20 @@ func (m model) handleEnter() (tea.Model, tea.Cmd) {
 		m.displayMessage = fmt.Sprintf("Switched to account: %s (%s)", accountStyle(selectedAccount.Name), accountStyle(selectedAccount.Email))
 		return m, tea.Quit
 	case 5:
-		// Deleting an account
+		// Handle account deletion
 		selectedAccount := m.accountList.SelectedItem().(Account)
 		if selectedAccount.Alias == "Default" {
 			m.displayMessage = "You cannot delete the Default account."
-			m.step = 1
 		} else {
 			m.deleteAccount(selectedAccount)
 			m.displayMessage = fmt.Sprintf("Deleted account: %s (%s)", accountStyle(selectedAccount.Name), accountStyle(selectedAccount.Email))
-			m.step = 1
 		}
+		// Refresh the list after deletion
+		m.accountList = list.New(m.getAccountItems(), list.NewDefaultDelegate(), 20, 10)
+		m.step = 1
 	}
-	return m, nil
+
+	return m, cmd
 }
 
 func (m model) View() string {
@@ -232,11 +246,7 @@ func (m model) View() string {
 	case 4:
 		body = m.accountList.View()
 	case 5:
-		// Display account details after switching and before closing
-		body = fmt.Sprintf("Switched to account: %s\n\nUsername: %s\nEmail: %s\n\nPress Enter to exit.",
-			accountStyle(m.currentAccount.Alias),
-			accountStyle(m.currentAccount.Name),
-			accountStyle(m.currentAccount.Email))
+		body = m.accountList.View()
 	}
 
 	return lipgloss.NewStyle().Padding(1, 2).Render(fmt.Sprintf("%s\n\n%s", header, body))
@@ -288,7 +298,8 @@ func getGitConfig(key string) (string, error) {
 }
 func (m *model) deleteAccount(account Account) {
 	for i, acc := range m.accounts {
-		if acc == account {
+		if acc.Name == account.Name && acc.Email == account.Email {
+			// Remove the account from the slice
 			m.accounts = append(m.accounts[:i], m.accounts[i+1:]...)
 			break
 		}
