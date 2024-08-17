@@ -5,7 +5,7 @@ const { execSync } = require('child_process');
 
 const platform = os.platform();
 const arch = os.arch();
-let binaryName = 'gitwizard';
+let binaryName = 'gitflex';
 let outputDir = 'bin';
 
 if (!fs.existsSync(outputDir)) {

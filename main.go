@@ -31,7 +31,7 @@ type model struct {
 	displayMessage string
 }
 
-const configFile = "gitwizard_config.json"
+const configFile = "gitflex_config.json"
 
 var (
 	titleStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF5F87")).Background(lipgloss.Color("#282A36")).Padding(1, 4).MarginBottom(1).Align(lipgloss.Center).Render
@@ -227,7 +227,7 @@ func (m model) handleEnter() (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	header := titleStyle("GitWizard")
+	header := titleStyle("GitFlex")
 	var body string
 
 	switch m.step {
