@@ -31,11 +31,11 @@ type model struct {
 	displayMessage string
 }
 
-const configFile = "gitswitch_config.json"
+const configFile = "gitwizard_config.json"
 
 var (
-	titleStyle       = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF5F87")).Background(lipgloss.Color("#282A36")).Padding(1, 4).MarginBottom(1).Align(lipgloss.Center).Render
-	headerStyle      = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#50FA7B")).Render
+	titleStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF5F87")).Background(lipgloss.Color("#282A36")).Padding(1, 4).MarginBottom(1).Align(lipgloss.Center).Render
+	// headerStyle      = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#50FA7B")).Render
 	accountStyle     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#BD93F9")).Render
 	placeholderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#8BE9FD")).Render
 )
@@ -227,7 +227,7 @@ func (m model) handleEnter() (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	header := titleStyle("GitSwitch")
+	header := titleStyle("GitWizard")
 	var body string
 
 	switch m.step {
