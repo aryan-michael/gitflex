@@ -1,0 +1,26 @@
+{
+  "name": "gitflux",
+  "version": "1.0.0",
+  "description": "A CLI tool to manage multiple GitHub accounts.",
+  "main": "index.js",
+  "bin": {
+    "gitflux": "./bin/gitflux"
+  },
+  "scripts": {
+    "start": "node ./bin/gitflux",
+    "build": "go build -o bin/gitflux main.go"
+  },
+  "dependencies": {},
+  "devDependencies": {},
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "author": "Aryan Michael",
+  "license": "MIT",
+  "keywords": [
+    "git",
+    "cli",
+    "github",
+    "accounts"
+  ]
+}
