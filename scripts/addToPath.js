@@ -1,7 +1,7 @@
 const os = require('os');
 const path = require('path');
 const fs = require('fs');
-const exec = require('child_process').execSync;
+const execSync = require('child_process').execSync;
 
 const platform = os.platform();
 const arch = os.arch();
@@ -23,20 +23,24 @@ const targetPath = path.join(binDir, 'gitflux');
 fs.copyFileSync(binaryPath, targetPath);
 
 if (platform === 'win32') {
-  // Add to PATH for Windows users
   try {
+    // Create a batch script to run the executable
+    const batchScriptPath = path.join(binDir, 'gitflux.cmd');
+    const batchScriptContent = `@echo off\n"${binaryPath}" %*`;
+    fs.writeFileSync(batchScriptPath, batchScriptContent);
+
+    // Add the bin directory to PATH
     const command = `setx PATH "%PATH%;${binDir}"`;
-    exec(command);
+    execSync(command, { stdio: 'inherit' });
     console.log('gitflux has been added to your PATH. Please restart your terminal.');
   } catch (error) {
-    console.error('Error adding to PATH:', error.message);
+    console.error('Error during post-installation setup:', error.message);
   }
 } else {
-  // Unix-based systems
   const shell = process.env.SHELL || '/bin/bash';
   const rcFile = shell.includes('zsh') ? '.zshrc' : '.bashrc';
   const profilePath = path.join(os.homedir(), rcFile);
-  
+
   fs.appendFileSync(profilePath, `\nexport PATH="$PATH:${binDir}"\n`);
   console.log(`gitflux has been added to your PATH. Please run 'source ~/${rcFile}' or restart your terminal.`);
 }
