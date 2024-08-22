@@ -1,7 +1,7 @@
 {
   "name": "gitflux",
-  "version": "1.1.7",
-  "description": "A CLI tool to manage multiple GitHub accounts.",
+  "version": "1.1.8",
+  "description": "Gitflux is a command-line application designed to optimize GitHub account switching significantly reducing manual switch time. It features an intuitive menu for seamless account selection and includes safeguards to protect default accounts streamlining the workflow for developers managing multiple GitHub identities.",
   "bin": {
     "gitflux": "./bin/gitflux"
   },
@@ -21,7 +21,17 @@
     "x64",
     "arm64"
   ],
-  "author": "Aryan Michael",
+  "author": "Aryan Michael", 
+  "contributors": [
+    {
+      "name": "Aryan Michael",
+      "email": "aryanmichael24@gmail.com"
+    },
+    {
+      "name": "Mihir Dharaiya",
+      "email": "mdharaiya800@gmail.com"
+    }
+  ],
   "license": "MIT",
   "keywords": [
     "git",
